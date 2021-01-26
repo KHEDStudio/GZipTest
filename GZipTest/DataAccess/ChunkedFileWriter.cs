@@ -29,10 +29,13 @@ namespace GZipTest.DataAccess
         {
             try
             {
-                int offset = 0;
-                _fileStream.Write(chunk.Bytes, offset, chunk.Bytes.Length);
-                _fileStream.Flush();
-                ChunkWritten?.Invoke(chunk, isLastChunk);
+                if (_token.IsCancellationRequested == false)
+                {
+                    int offset = 0;
+                    _fileStream.Write(chunk.Bytes, offset, chunk.Bytes.Length);
+                    _fileStream.Flush();
+                    ChunkWritten?.Invoke(chunk, isLastChunk);
+                }
             }
             catch (Exception ex)
             {

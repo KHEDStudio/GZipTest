@@ -18,22 +18,22 @@ namespace GZipTest.ChunkedHandlers
         public event Action<ErrorEventArgs> OnError;
 
         private readonly int MaxQueueChunksSize = 3;
+        private readonly object _syncTakeChunk;
         private AutoResetEvent _queueTakeEvent;
-        private BlockingCollection<Chunk> _chunks;
+        private BlockingCollection<(Chunk, bool)> _chunks;
 
         public ChunkedHandler()
         {
+            _syncTakeChunk = new object();
             _queueTakeEvent = new AutoResetEvent(false);
-            _chunks = new BlockingCollection<Chunk>();
+            _chunks = new BlockingCollection<(Chunk, bool)>();
         }
 
         public void AddChunkToQueue(Chunk chunk, bool isLastChunk)
         {
             while (_chunks.Count >= MaxQueueChunksSize)
                 _queueTakeEvent.WaitOne();
-            _chunks.Add(chunk);
-            if (isLastChunk)
-                _chunks.CompleteAdding();
+            _chunks.Add((chunk, isLastChunk));
         }
 
         public void Start()
@@ -42,15 +42,23 @@ namespace GZipTest.ChunkedHandlers
             {
                 while (_chunks.IsCompleted == false)
                 {
-                    bool isRemoved = _chunks.TryTake(out var chunk);
-                    _queueTakeEvent.Set();
+                    (Chunk, bool) chunkPair;
+                    bool isRemoved, isQueueCompleted;
+                    lock (_syncTakeChunk)
+                    {
+                        isRemoved = _chunks.TryTake(out chunkPair);
+                        isQueueCompleted = _chunks.IsCompleted;
+                    }
                     if (isRemoved)
                     {
+                        _queueTakeEvent.Set();
                         using (var memoryStream = new MemoryStream())
                         {
+                            var (chunk, isLastChunk) = chunkPair;
                             WriteChunkToStream(memoryStream, chunk);
                             var proccessedBytes = GetBytesFromStream(memoryStream);
-                            ChunkHandled?.Invoke(new Chunk(chunk.Index, proccessedBytes), _chunks.IsCompleted);
+                            ChunkHandled?.Invoke(new Chunk(chunk.Index, proccessedBytes),
+                                isLastChunk || isQueueCompleted);
                         }
                     }
                 }
@@ -72,7 +80,8 @@ namespace GZipTest.ChunkedHandlers
 
         public void Dispose()
         {
-            _chunks.CompleteAdding();
+            if (_chunks.IsAddingCompleted == false)
+                _chunks.CompleteAdding();
         }
     }
 }

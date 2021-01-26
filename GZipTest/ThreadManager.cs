@@ -47,12 +47,9 @@ namespace GZipTest
             _reader.OnError += error => OnError($"While reading: {error.GetException().Message}");
             _chunkedHandler.ChunkHandled += (chunk, isLastChunk) =>
             {
-                while (Interlocked.CompareExchange(ref _chunkIndex, 0, 0) != chunk.Index)
-                {
-                    if (_token.IsCancellationRequested)
-                        return;
+                while (Interlocked.CompareExchange(ref _chunkIndex, 0, 0) != chunk.Index
+                    && _token.IsCancellationRequested == false)
                     _chunkWriteEvent.WaitOne();
-                }
                 _chunkWriteEvent.Reset();
                 _writer.WriteChunk(chunk, isLastChunk);
                 Interlocked.Increment(ref _chunkIndex);
@@ -89,6 +86,7 @@ namespace GZipTest
             _token.Cancel();
             _chunkWriteEvent.Set();
             _allBytesWritten.Set();
+            _chunkedHandler.Dispose();
         }
 
         private void OnError(string msg)

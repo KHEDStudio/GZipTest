@@ -24,6 +24,11 @@ namespace GZipTest.UI
                 return (false, "No source file name was specified.");
             }
 
+            if (args[2].Length == 0)
+            {
+                return (false, "No destination file name was specified.");
+            }
+
             if (File.Exists(args[1]) == false)
             {
                 return (false, "No source file was found.");
