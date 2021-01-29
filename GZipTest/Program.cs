@@ -11,8 +11,16 @@ namespace GZipTest
     {
         public static int Main(string[] args)
         {
-            var mainUI = new MainUI();
-            return mainUI.Run(args);
+            using var mainUI = new MainUI();
+            try
+            {
+                return mainUI.Run(args);
+            }
+            catch (Exception ex)
+            {
+                mainUI.WriteConsoleWithTag(ex.Message);
+                return 1;
+            }
         }
     }
 }

@@ -1,11 +1,8 @@
 ﻿using GZipTest.ChunkedHandlers;
 using GZipTest.ChunkedHandlers.ChunkedGZip;
 using GZipTest.DataAccess;
-using GZipTest.Shared.Interfaces;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading;
 
 namespace GZipTest
@@ -47,8 +44,9 @@ namespace GZipTest
             _reader.OnError += error => OnError($"While reading: {error.GetException().Message}");
             _chunkedHandler.ChunkHandled += (chunk, isLastChunk) =>
             {
-                while (Interlocked.CompareExchange(ref _chunkIndex, 0, 0) != chunk.Index
-                    && _token.IsCancellationRequested == false)
+                if (_token.IsCancellationRequested)
+                    return;
+                while (Interlocked.CompareExchange(ref _chunkIndex, 0, 0) != chunk.Index)
                     _chunkWriteEvent.WaitOne();
                 _chunkWriteEvent.Reset();
                 _writer.WriteChunk(chunk, isLastChunk);
@@ -76,7 +74,6 @@ namespace GZipTest
                 thread.Start();
             }
             _reader.ReadAllBytes();
-            _reader.Dispose();
             _allBytesWritten.WaitOne();
             return Convert.ToInt32(_token.IsCancellationRequested);
         }
@@ -100,8 +97,11 @@ namespace GZipTest
 
         public void Dispose()
         {
+            _reader.Dispose();
             _chunkedHandler.Dispose();
             _writer.Dispose();
+            _allBytesWritten.Close();
+            _chunkWriteEvent.Close();
         }
     }
 }

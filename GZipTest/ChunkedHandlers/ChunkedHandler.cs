@@ -38,6 +38,7 @@ namespace GZipTest.ChunkedHandlers
 
         public void Start()
         {
+            Chunk chu;
             try
             {
                 while (_chunks.IsCompleted == false)
@@ -51,6 +52,7 @@ namespace GZipTest.ChunkedHandlers
                     }
                     if (isRemoved)
                     {
+                        chu = chunkPair.Item1;
                         _queueTakeEvent.Set();
                         using (var memoryStream = new MemoryStream())
                         {
@@ -81,7 +83,10 @@ namespace GZipTest.ChunkedHandlers
         public void Dispose()
         {
             if (_chunks.IsAddingCompleted == false)
+            {
                 _chunks.CompleteAdding();
+                _queueTakeEvent.Close();
+            }
         }
     }
 }

@@ -6,8 +6,9 @@ using System.Text;
 
 namespace GZipTest.UI
 {
-    public class MainUI
+    public class MainUI : IDisposable
     {
+        private ThreadManager _threadManager;
         private ProgressBarAdapter _progressBar;
         private readonly int MaxBytesChunk = 1024 * 1024;
 
@@ -17,33 +18,31 @@ namespace GZipTest.UI
             var (compressionMode, sourceFilePath, destinationFilePath) = GetValidatedParams(args);
             var sourceFile = new FileInfo(sourceFilePath);
             var destinationFile = new FileInfo(destinationFilePath);
-            ThreadManager threadManager;
             _progressBar = new ProgressBarAdapter();
             if (compressionMode == "compress")
             {
                 var compressor = new ChunkedGZipCompressor();
-                threadManager = new ThreadManager(sourceFile, MaxBytesChunk, compressor, destinationFile);
+                _threadManager = new ThreadManager(sourceFile, MaxBytesChunk, compressor, destinationFile);
                 _progressBar.SetStatus("Compressing...");
             }
             else
             {
                 var decompressor = new ChunkedGZipDecompressor();
-                threadManager = new ThreadManager(sourceFile, decompressor, destinationFile);
+                _threadManager = new ThreadManager(sourceFile, decompressor, destinationFile);
                 _progressBar.SetStatus("Decompressing...");
             }
-            threadManager.UpdateInfoText += msg => WriteConsoleWithTag(msg);
-            threadManager.PercentProgressChanged += _progressBar.SetProgress;
+            _threadManager.UpdateInfoText += msg => WriteConsoleWithTag(msg);
+            _threadManager.PercentProgressChanged += _progressBar.SetProgress;
             Console.CancelKeyPress += (s, e) =>
             {
                 if (e.SpecialKey == ConsoleSpecialKey.ControlC)
                 {
                     _progressBar?.SetStatus("Cancelling...");
                     e.Cancel = true;
-                    threadManager?.Cancel();
+                    _threadManager?.Cancel();
                 }
             };
-            using (threadManager)
-                return threadManager.Run();
+            return _threadManager.Run();
         }
 
         private (string, string, string) GetValidatedParams(string[] args)
@@ -68,14 +67,14 @@ namespace GZipTest.UI
             return Console.ReadLine();
         }
 
-        private void WriteConsole(string message)
+        public void WriteConsole(string message)
         {
             if (_progressBar == null)
                 Console.WriteLine(message);
             else _progressBar.WriteLine(message);
         }
 
-        private void WriteConsoleWithTag(string message, bool newLine = true)
+        public void WriteConsoleWithTag(string message, bool newLine = true)
         {
             if (_progressBar == null)
             {
@@ -93,6 +92,14 @@ namespace GZipTest.UI
                               "Compressing: GZipTest.exe compress [Source file path] [Destination file path]\n" +
                               "Decompressing: GZipTest.exe decompress [Compressed file path] [Destination file path]\n" +
                               "To complete the program correct please use the combination CTRL + C");
+        }
+
+        public void Dispose()
+        {
+            if (_threadManager != null)
+                _threadManager.Dispose();
+            _progressBar.SetStatus(string.Empty);
+            _progressBar.Dispose();
         }
     }
 }

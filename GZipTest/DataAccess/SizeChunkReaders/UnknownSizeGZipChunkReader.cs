@@ -11,15 +11,39 @@ namespace GZipTest.DataAccess.SizeChunkReaders
     public class UnknownSizeGZipChunkReader : ISizeChunkReader
     {
         private Stream _stream;
-        private readonly int GZipHeaderSize = 10;
+        private readonly int GZipHeaderSize = 10; // RFC 1952
         private readonly byte[] GZipHeaderSignature;
         private readonly byte[] GZipMagicNumber = new byte[] { 0x1f, 0x8b };
         private readonly byte[] DeflateMethod = new byte[] { 0x08 };
+        private readonly byte[] ReservedBitsFlags = new byte[] { 0xe0 };
 
         public UnknownSizeGZipChunkReader(Stream stream)
         {
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
-            GZipHeaderSignature = GZipMagicNumber.Union(DeflateMethod).ToArray();
+            GZipHeaderSignature = GetFirstHeaderSignature();
+        }
+
+        private byte[] GetFirstHeaderSignature()
+        {
+            int offset = 0, startPosition = 0;
+            var currentPosition = _stream.Position;
+            _stream.Position = startPosition;
+            var buffer = GetGZipHeader(offset).ToArray();
+            _stream.Position = currentPosition;
+            if (IsValidGZipHeader(buffer) == false)
+                throw new Exception("The archive entry was compressed using an unsupported compression method.");
+            return buffer;
+        }
+
+        private bool IsValidGZipHeader(byte[] header)
+        {
+            if (header[0] != GZipMagicNumber[0] || header[1] != GZipMagicNumber[1])
+                return false;
+            if (header[2] != DeflateMethod[0])
+                return false;
+            if (Convert.ToBoolean(header[3] & ReservedBitsFlags[0]))
+                return false;
+            return true;
         }
 
         public byte[] GetChunkBytes(int offset)
