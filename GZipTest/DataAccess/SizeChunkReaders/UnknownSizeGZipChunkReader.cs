@@ -11,6 +11,7 @@ namespace GZipTest.DataAccess.SizeChunkReaders
     public class UnknownSizeGZipChunkReader : ISizeChunkReader
     {
         private Stream _stream;
+        private BytesReader _reader;
         private readonly int GZipHeaderSize = 10; // RFC 1952
         private readonly byte[] GZipHeaderSignature;
         private readonly byte[] GZipMagicNumber = new byte[] { 0x1f, 0x8b };
@@ -20,6 +21,7 @@ namespace GZipTest.DataAccess.SizeChunkReaders
         public UnknownSizeGZipChunkReader(Stream stream)
         {
             _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            _reader = new BytesReader(_stream);
             GZipHeaderSignature = GetFirstHeaderSignature();
         }
 
@@ -28,7 +30,7 @@ namespace GZipTest.DataAccess.SizeChunkReaders
             int offset = 0, startPosition = 0;
             var currentPosition = _stream.Position;
             _stream.Position = startPosition;
-            var buffer = GetGZipHeader(offset).ToArray();
+            var buffer = GetGZipHeader(offset);
             _stream.Position = currentPosition;
             if (IsValidGZipHeader(buffer) == false)
                 throw new Exception("The archive entry was compressed using an unsupported compression method.");
@@ -48,44 +50,29 @@ namespace GZipTest.DataAccess.SizeChunkReaders
 
         public byte[] GetChunkBytes(int offset)
         {
-            var listBytes = new List<byte>(GetGZipHeader(offset));
-            var reader = new BytesReader(_stream);
-            int _offset = 0, length = 1024 * 1024;
-            var readBytes = reader.GetBytes(_offset, length);
+            var headerBytes = GetGZipHeader(offset);
+            var listBytes = new List<byte>(headerBytes);
+            var readByte = _stream.ReadByte();
+            var headerMathsCount = 0;
             var headerSignatureOffset = GZipHeaderSignature.Length;
-            var headerSignatureIndexOffset = GZipHeaderSignature.Length - 1;
-            while (readBytes.Length != 0)
+            while (readByte != -1)
             {
-                var startIndex = listBytes.Count;
-                listBytes.AddRange(readBytes);
-                for (int i = startIndex; i < listBytes.Count; i++)
+                listBytes.Add((byte)readByte);
+                if (readByte == headerBytes[headerMathsCount])
                 {
-                    if (IsFoundGZipHeaderSignature(listBytes.GetRange(i - headerSignatureIndexOffset, headerSignatureOffset).ToArray()))
+                    headerMathsCount++;
+                    if (headerMathsCount == headerBytes.Length)
                     {
-                        int offsetPosition = listBytes.Count - i + headerSignatureIndexOffset;
-                        _stream.Position -= offsetPosition;
-                        return listBytes.GetRange(0, i - headerSignatureIndexOffset).ToArray();
+                        _stream.Position -= headerSignatureOffset;
+                        return listBytes.ToArray();
                     }
                 }
-                readBytes = reader.GetBytes(_offset, length);
+                else headerMathsCount = 0;
+                readByte = _stream.ReadByte();
             }
             return listBytes.ToArray();
         }
 
-        private IEnumerable<byte> GetGZipHeader(int offset)
-        {
-            var reader = new BytesReader(_stream);
-            return reader.GetBytes(offset, GZipHeaderSize);
-        }
-
-        private bool IsFoundGZipHeaderSignature(byte[] lastBytes)
-        {
-            for (int i = 0; i < GZipHeaderSignature.Length; i++)
-            {
-                if (GZipHeaderSignature[i] != lastBytes[i])
-                    return false;
-            }
-            return true;
-        }
+        private byte[] GetGZipHeader(int offset) => _reader.GetBytes(offset, GZipHeaderSize);
     }
 }

@@ -17,7 +17,7 @@ namespace GZipTest.ChunkedHandlers
         public event Action<Chunk, bool> ChunkHandled;
         public event Action<ErrorEventArgs> OnError;
 
-        private readonly int MaxQueueChunksSize = 3;
+        private readonly int MaxQueueChunksSize = 5;
         private readonly object _syncTakeChunk;
         private AutoResetEvent _queueTakeEvent;
         private BlockingCollection<(Chunk, bool)> _chunks;
@@ -38,7 +38,6 @@ namespace GZipTest.ChunkedHandlers
 
         public void Start()
         {
-            Chunk chu;
             try
             {
                 while (_chunks.IsCompleted == false)
@@ -52,7 +51,6 @@ namespace GZipTest.ChunkedHandlers
                     }
                     if (isRemoved)
                     {
-                        chu = chunkPair.Item1;
                         _queueTakeEvent.Set();
                         using (var memoryStream = new MemoryStream())
                         {
